@@ -1,0 +1,46 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "speech-lab-mcp"
+version = "0.1.0"
+description = "MCP lab for local and cloud text-to-speech (Piper, Pocket, Woof, Cartesia)"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+authors = [
+  { name = "Stephen Phillips" },
+  { name = "HappyMonkeyAI" },
+]
+dependencies = [
+  "mcp>=1.9,<2",
+  "httpx>=0.27",
+  "pydantic>=2.7",
+  "pydantic-settings>=2.4",
+  "uvicorn>=0.30",
+  "cartesia>=2.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0",
+  "pytest-asyncio>=0.24",
+  "respx>=0.21",
+]
+
+[project.scripts]
+speech-lab-mcp = "speech_lab_mcp.__main__:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/speech_lab_mcp"]
+
+# src/ layout
+[tool.hatch.build.targets.sdist]
+include = ["src/speech_lab_mcp", "README.md", "pyproject.toml"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+pythonpath = ["src"]

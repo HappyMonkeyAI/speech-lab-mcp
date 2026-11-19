@@ -1,0 +1,110 @@
+# SpeechLab MCP + optional local TTS engines.
+#
+# Always:
+#   docker compose up --build mcp
+#
+# Local engines (sibling build contexts; override paths via .env if needed):
+#   docker compose --profile piper up --build
+#   docker compose --profile pocket up --build
+#   docker compose --profile local up --build   # piper + pocket
+#   docker compose --profile woof up --build    # needs WOOF_MODEL_DIR
+#
+# MCP HTTP endpoint (streamable HTTP): http://127.0.0.1:8765/mcp
+# WAVs land in ./data/out on the host.
+
+services:
+  mcp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: speech-lab-mcp:local
+    container_name: speech-lab-mcp
+    ports:
+      - "127.0.0.1:8765:8765"
+    environment:
+      SPEECH_LAB_TRANSPORT: streamable-http
+      SPEECH_LAB_HOST: 0.0.0.0
+      SPEECH_LAB_PORT: "8765"
+      SPEECH_LAB_OUTPUT_DIR: /data/out
+      SPEECH_LAB_PIPER_URL: ${SPEECH_LAB_PIPER_URL:-http://piper:8000}
+      SPEECH_LAB_POCKET_URL: ${SPEECH_LAB_POCKET_URL:-http://pocket:8090}
+      SPEECH_LAB_WOOF_URL: ${SPEECH_LAB_WOOF_URL:-http://woof:8000}
+      SPEECH_LAB_DEFAULT_PROVIDER: ${SPEECH_LAB_DEFAULT_PROVIDER:-piper}
+      SPEECH_LAB_HTTP_TIMEOUT_S: ${SPEECH_LAB_HTTP_TIMEOUT_S:-60}
+      CARTESIA_API_KEY: ${CARTESIA_API_KEY:-}
+      CARTESIA_VOICE_ID: ${CARTESIA_VOICE_ID:-}
+      CARTESIA_MODEL_ID: ${CARTESIA_MODEL_ID:-sonic-3.5}
+      CARTESIA_SAMPLE_RATE: ${CARTESIA_SAMPLE_RATE:-24000}
+    volumes:
+      - ./data/out:/data/out
+    restart: unless-stopped
+
+  piper:
+    profiles: ["piper", "local"]
+    build:
+      context: ${PIPER_BUILD_CONTEXT:-../text-echo/tts}
+      dockerfile: Dockerfile
+      args:
+        PIPER_VOICE: ${PIPER_VOICE:-en_GB-alba-medium}
+        PIPER_VOICES: ${PIPER_VOICES:-en_GB-alba-medium,en_US-lessac-medium}
+    image: speech-lab-piper:local
+    container_name: speech-lab-piper
+    ports:
+      - "127.0.0.1:8090:8000"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 30s
+    restart: unless-stopped
+
+  pocket:
+    profiles: ["pocket", "local"]
+    build:
+      context: ${POCKET_BUILD_CONTEXT:-../../miso/pocket}
+      dockerfile: Dockerfile
+    image: speech-lab-pocket:local
+    container_name: speech-lab-pocket
+    ports:
+      - "127.0.0.1:8091:8090"
+    environment:
+      HF_TOKEN: ${HF_TOKEN:-}
+      HUGGING_FACE_HUB_TOKEN: ${HF_TOKEN:-}
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8090/health')",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 300s
+    restart: unless-stopped
+
+  woof:
+    profiles: ["woof"]
+    build:
+      context: ${WOOF_BUILD_CONTEXT:-../agent-voice-tts/sidecars/woof-tts}
+      dockerfile: Dockerfile
+    image: speech-lab-woof:local
+    container_name: speech-lab-woof
+    ports:
+      - "127.0.0.1:8092:8000"
+    environment:
+      WOOF_MODEL_DIR: /models/underdog-woof
+      WOOF_VOICE: ${WOOF_VOICE:-juno}
+      MAX_CHARS: ${WOOF_MAX_CHARS:-5000}
+    volumes:
+      # Set WOOF_MODEL_DIR in .env to a ConwayResearch/Underdog-Woof checkout before --profile woof.
+      - ${WOOF_MODEL_DIR:-./.woof-model-placeholder}:/models/underdog-woof:ro
+    restart: unless-stopped
